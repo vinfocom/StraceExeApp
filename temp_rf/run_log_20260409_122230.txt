@@ -1,0 +1,12 @@
+
+============================================================
+ LTE PREDICTOR — 3GPP 3D ANTENNA + INTER-CELL INTERFERENCE
+[2bc000] Fetching site data
+[2bc000] Operator: Airtel
+[2bc000] Fetching drive data
+⚡ CACHE HIT
+[2bc000] Fetching building data
+[2bc000] RF Prediction
+
+============================================================
+ LTE PREDICTOR — 3GPP 3D ANTENNA + INTER-CELL INTERFERENCE

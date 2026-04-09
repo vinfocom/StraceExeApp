@@ -1,0 +1,8 @@
+
+============================================================
+ LTE PREDICTOR — 3GPP 3D ANTENNA + INTER-CELL INTERFERENCE
+ Cores: 31   Frequency: 1800.0 MHz   BW: 10.0 MHz
+============================================================
+
+✔ Loaded 0 building polygons (skipped 3159)
+📌 Calibrating K1/K2 from drive-test data...
