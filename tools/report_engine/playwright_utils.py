@@ -2,21 +2,57 @@
 
 import os
 import shutil
+import sys
 from playwright.sync_api import sync_playwright
 
 
 def _configure_playwright_browser_path():
     # Keep Playwright browser binaries inside the project so local runs and Electron launches are consistent.
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    default_browser_path = os.path.join(project_root, ".playwright-browsers")
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", default_browser_path)
-    return os.environ["PLAYWRIGHT_BROWSERS_PATH"]
+    # Use a dedicated Windows cache folder so mixed Linux/Windows browser payloads
+    # do not conflict when sharing a repository across environments.
+    default_dir_name = ".playwright-browsers-win" if sys.platform.startswith("win") else ".playwright-browsers"
+    default_browser_path = os.path.join(project_root, default_dir_name)
+    configured_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH")
+
+    # On Windows, ignore stale Unix-style paths (common when env is inherited
+    # from Linux deployment configs) and force project-local browser cache.
+    if sys.platform.startswith("win"):
+        if configured_path:
+            looks_unix_abs = configured_path.startswith("/") or configured_path.startswith("\\home\\")
+            if looks_unix_abs and not os.path.exists(configured_path):
+                configured_path = None
+        if not configured_path:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = default_browser_path
+            configured_path = default_browser_path
+    else:
+        if not configured_path:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = default_browser_path
+            configured_path = default_browser_path
+
+    return configured_path
 
 
 def _resolve_system_chrome_path():
     env_path = os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
     if env_path and os.path.exists(env_path):
         return env_path
+
+    if sys.platform.startswith("win"):
+        local_app_data = os.getenv("LOCALAPPDATA", "")
+        program_files = os.getenv("PROGRAMFILES", "C:\\Program Files")
+        program_files_x86 = os.getenv("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
+        windows_candidates = [
+            os.path.join(local_app_data, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files, "Chromium", "Application", "chrome.exe"),
+            os.path.join(program_files_x86, "Chromium", "Application", "chrome.exe"),
+            os.path.join(local_app_data, "Chromium", "Application", "chrome.exe"),
+        ]
+        for candidate in windows_candidates:
+            if candidate and os.path.exists(candidate):
+                return candidate
 
     for candidate in (
         "google-chrome",

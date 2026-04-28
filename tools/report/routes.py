@@ -4,10 +4,12 @@ import threading
 import uuid
 import json
 from queue import Queue, Empty
+from config import get_reports_root
 
 from tools.report_engine.main import main as generate_report
 from tools.report_engine.db import get_project_by_id
 from extensions import db
+from utils.signaltrackers_client import backend_db_mode_enabled
 
 report_bp = Blueprint("report", __name__)
 REPORT_JOBS = {}
@@ -90,7 +92,7 @@ def background_report_task(app, project_id, user_id, report_id):
                 project_id=project_id,
                 user_id=user_id,
                 report_id=report_id,
-                db_engine=db.engine,
+                db_engine=None if backend_db_mode_enabled() else db.engine,
             )
             project = get_project_by_id(project_id)
             download_url = (project or {}).get("Download_path")
@@ -124,7 +126,6 @@ def generate():
         return jsonify({"error": "project_id is required"}), 400
     if not user_id:
         return jsonify({"error": "user_id is required"}), 400
-
     report_id = str(uuid.uuid4())
     current_app.logger.info(
         f"[Report] Report generation started: project_id={project_id}, user_id={user_id}, report_id={report_id}"
@@ -218,7 +219,7 @@ def events(report_id):
 
 @report_bp.route("/download/<report_id>", methods=["GET"])
 def download(report_id):
-    reports_dir = os.path.join(current_app.root_path, "data", "reports")
+    reports_dir = get_reports_root()
     pdf_path = os.path.join(reports_dir, report_id, "report.pdf")
 
     if os.path.exists(pdf_path):

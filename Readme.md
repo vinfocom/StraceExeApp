@@ -8,3 +8,10 @@ Invoke-RestMethod -Method Post `
 >> 
 
 """
+
+## Desktop EXE security
+
+- Keep `DB_ACCESS_MODE=backend`.
+- Do not ship `DATABASE_URL`, `DB_USER`, `DB_PASSWORD` in `.env`.
+- Desktop Python must call C# APIs (`SIGNAL_TRACKERS_API_URL`) instead of direct DB access.
+- Use `python/.env.example` as the safe template for packaged builds.

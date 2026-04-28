@@ -711,24 +711,13 @@ def format_duration(seconds):
 
 def get_session_data_for_drive_summary(session_ids: list):
     """Fetch session data from database"""
-    from .db import get_engine
-    from sqlalchemy import text, bindparam
+    from .db import get_sessions_by_ids
     
     if not session_ids:
         return None
     
     try:
-        engine = get_engine()
-        query = text("""
-        SELECT id, start_time, end_time, distance
-        FROM defaultdb.tbl_session
-        WHERE id IN :session_ids
-        ORDER BY start_time
-        """).bindparams(bindparam("session_ids", expanding=True))
-
-        with engine.connect() as conn:
-            df = pd.read_sql(query, conn, params={"session_ids": session_ids})
-        return df
+        return get_sessions_by_ids(session_ids)
     except Exception as e:
         print(f"ERROR: Failed to fetch session data: {e}")
         return None

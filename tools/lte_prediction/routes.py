@@ -12,6 +12,9 @@ def run_prediction():
         data = request.get_json() or {}
         if "project_id" not in data or "session_ids" not in data:
             return jsonify({"error": "project_id and session_ids are required"}), 400
+        user_id = int(data.get("user_id") or data.get("User_id") or 0)
+        if user_id <= 0:
+            return jsonify({"error": "user_id is required"}), 400
 
         cpu_count = multiprocessing.cpu_count()
         project_id = int(data["project_id"])

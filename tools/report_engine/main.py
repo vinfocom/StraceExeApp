@@ -2,6 +2,7 @@
 
 import os
 import uuid
+from config import get_reports_root, get_runtime_root
 from .threshold_resolver import resolve_kpi_ranges
 from .load_data_db import load_project_data
 from .kpi_config import KPI_CONFIG
@@ -25,7 +26,6 @@ from .s3_uploader import upload_pdf
 from .db import get_user_by_id, init_engine, update_project_download_path
 
 import shutil
-import os
 
 def clean_directory(path):
     if os.path.exists(path):
@@ -37,8 +37,8 @@ def clean_directory(path):
                 shutil.rmtree(fp)
 
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
-REPORTS_DIR = os.path.join(DATA_DIR, "reports")
+DATA_DIR = os.path.join(get_runtime_root(), "report_data")
+REPORTS_DIR = get_reports_root()
 
 
 def main(
@@ -51,12 +51,12 @@ def main(
         init_engine(db_engine)
     report_id = report_id or str(uuid.uuid4())
 
-    report_tmp_dir = f"{DATA_DIR}/tmp/{report_id}"
-    html_dir = f"{report_tmp_dir}/html"
-    images_dir = f"{report_tmp_dir}/images"
-    kpi_maps_dir = f"{images_dir}/kpi_maps"
-    processed_dir = f"{report_tmp_dir}/processed"
-    report_out_dir = f"{REPORTS_DIR}/{report_id}"
+    report_tmp_dir = os.path.join(DATA_DIR, "tmp", report_id)
+    html_dir = os.path.join(report_tmp_dir, "html")
+    images_dir = os.path.join(report_tmp_dir, "images")
+    kpi_maps_dir = os.path.join(images_dir, "kpi_maps")
+    processed_dir = os.path.join(report_tmp_dir, "processed")
+    report_out_dir = os.path.join(REPORTS_DIR, report_id)
 
     os.makedirs(html_dir, exist_ok=True)
     os.makedirs(kpi_maps_dir, exist_ok=True)
@@ -99,8 +99,8 @@ def main(
     print("\n==============================================")
     print("GENERATING BASE ROUTE MAP")
     print("==============================================")
-    base_html_path = f"{html_dir}/base_route.html"
-    base_png_path = f"{kpi_maps_dir}/base_route_map.png"
+    base_html_path = os.path.join(html_dir, "base_route.html")
+    base_png_path = os.path.join(kpi_maps_dir, "base_route_map.png")
     try:
         generate_base_route_map(filtered_df, polygon_wkt, base_html_path)
         html_to_png(base_html_path, base_png_path)
@@ -127,8 +127,8 @@ def main(
         if df_kpi.empty:
             continue
 
-        html_path = f"{html_dir}/{kpi}.html"
-        png_path = f"{kpi_maps_dir}/{cfg['map_name']}"
+        html_path = os.path.join(html_dir, f"{kpi}.html")
+        png_path = os.path.join(kpi_maps_dir, cfg["map_name"])
 
         if cfg["type"] == "range":
             print("\n==============================================")
@@ -181,7 +181,7 @@ def main(
     print("==============================================")
     generate_poor_region_maps(
         filtered_df,
-        output_dir=f"{images_dir}/kpi_maps",
+        output_dir=os.path.join(images_dir, "kpi_maps"),
         tmp_dir=html_dir,
         polygon_wkt=polygon_wkt
     )
@@ -193,8 +193,8 @@ def main(
     print("GENERATING HANDOVER MAP")
     print("==============================================")
     try:
-        handover_html = f"{html_dir}/handover_map.html"
-        handover_png = f"{kpi_maps_dir}/handover_map.png"
+        handover_html = os.path.join(html_dir, "handover_map.html")
+        handover_png = os.path.join(kpi_maps_dir, "handover_map.png")
         # Use stable run length to avoid noisy events (use 10 as tuned in test)
         events = detect_handover_events(filtered_df, use_global_detection=True, min_run_length=10)
         generate_handover_map(filtered_df, events, handover_html, polygon_wkt=polygon_wkt)
@@ -207,7 +207,7 @@ def main(
     # 3. SAVE FILTERED DATA
     # --------------------------------------------------
     filtered_df.to_csv(
-        f"{processed_dir}/filtered_data.csv",
+        os.path.join(processed_dir, "filtered_data.csv"),
         index=False,
     )
 
@@ -225,7 +225,7 @@ def main(
     if session_ids:
         generate_all_cdf_plots(
             session_ids=session_ids,
-            output_dir=f"{images_dir}/kpi_analysis"
+            output_dir=os.path.join(images_dir, "kpi_analysis")
         )
     else:
         print(" Warning: No session IDs found, skipping CDF generation")
@@ -238,7 +238,7 @@ def main(
         user_id, 
         KPI_CONFIG,
         session_ids=session_ids,
-        image_dir=f"{images_dir}/kpi_analysis"
+        image_dir=os.path.join(images_dir, "kpi_analysis")
     )
     metadata = build_metadata(
         filtered_df,
@@ -247,7 +247,7 @@ def main(
     )
     write_metadata_file(
         metadata,
-        f"{processed_dir}/report_metadata.json",
+        os.path.join(processed_dir, "report_metadata.json"),
     )
 
     # --------------------------------------------------
@@ -259,7 +259,7 @@ def main(
     
     report_text = generate_report_text(
         metadata=metadata,
-        output_path=f"{processed_dir}/report_text.json",
+        output_path=os.path.join(processed_dir, "report_text.json"),
         verbose=True
     )
 
@@ -271,9 +271,9 @@ def main(
     print("==============================================")
     
     pdf_path = generate_pdf_report(
-        metadata_path=f"{processed_dir}/report_metadata.json",
-        report_text_path=f"{processed_dir}/report_text.json",
-        output_path=f"{report_out_dir}/report.pdf",
+        metadata_path=os.path.join(processed_dir, "report_metadata.json"),
+        report_text_path=os.path.join(processed_dir, "report_text.json"),
+        output_path=os.path.join(report_out_dir, "report.pdf"),
         images_dir=images_dir,
         verbose=True
     )
@@ -349,6 +349,4 @@ def main(
     return kpi_metadata
     
     
-
-
 

@@ -243,6 +243,36 @@ def standardize_latlon(df):
 
     return df.rename(columns=mapping)
 
+
+def _ensure_site_prediction_columns(site_df):
+    alias_map = {
+        "electrical_tilt": ["electrical_tilt", "electical_tilt", "e_tilt", "etilt", "Etilt"],
+        "mechanical_tilt": ["mechanical_tilt", "m_tilt", "mtilt", "Mtilt"],
+        "antenna_height": ["antenna_height", "height", "Height"],
+    }
+
+    cols_by_norm = {str(c).strip().lower().replace(" ", "_"): c for c in site_df.columns}
+    for target, aliases in alias_map.items():
+        if target in site_df.columns:
+            continue
+        for alias in aliases:
+            hit = cols_by_norm.get(str(alias).strip().lower().replace(" ", "_"))
+            if hit:
+                site_df = site_df.rename(columns={hit: target})
+                break
+
+    if "electrical_tilt" not in site_df.columns:
+        site_df["electrical_tilt"] = 0.0
+    if "mechanical_tilt" not in site_df.columns:
+        site_df["mechanical_tilt"] = 0.0
+    if "antenna_height" not in site_df.columns:
+        site_df["antenna_height"] = 30.0
+
+    site_df["electrical_tilt"] = pd.to_numeric(site_df["electrical_tilt"], errors="coerce").fillna(0.0)
+    site_df["mechanical_tilt"] = pd.to_numeric(site_df["mechanical_tilt"], errors="coerce").fillna(0.0)
+    site_df["antenna_height"] = pd.to_numeric(site_df["antenna_height"], errors="coerce").fillna(30.0)
+    return site_df
+
 # ==========================================================
 # LOAD AREA POLYGON
 # ==========================================================
@@ -280,8 +310,19 @@ def load_building_polygons(path):
     df = pd.read_csv(path)
     df.columns = [c.strip().lower() for c in df.columns]
 
-    if "region" not in df.columns:
-        raise ValueError("❌ Column 'region' not found in building CSV")
+    if df.empty:
+        print("⚠ Building CSV is empty. Continuing without building polygons.")
+        return None, None
+
+    region_col = None
+    for candidate in ("region", "wkt", "polygon", "geometry"):
+        if candidate in df.columns:
+            region_col = candidate
+            break
+
+    if region_col is None:
+        print("⚠ Building CSV has no region/WKT geometry column. Continuing without building polygons.")
+        return None, None
 
     polygons = []
     meta     = []
@@ -302,7 +343,7 @@ def load_building_polygons(path):
 
     skipped = 0
     for idx, row in df.iterrows():
-        raw = str(row["region"]).strip()
+        raw = str(row[region_col]).strip()
         if raw.lower() in ("nan", "none", ""):
             skipped += 1
             continue
@@ -321,6 +362,10 @@ def load_building_polygons(path):
                 skipped += 1
         except:
             skipped += 1
+
+    if len(polygons) == 0:
+        print(f"⚠ No valid building polygons loaded (skipped {skipped}). Continuing without building polygons.")
+        return None, None
 
     print(f"✔ Loaded {len(polygons)} building polygons (skipped {skipped})")
     return polygons, meta
@@ -542,11 +587,13 @@ def main(args):
         raise ValueError("❌ 'cell_id' column missing in site file.")
 
     site_df["Node_Cell_ID"] = site_df["cell_id"].astype(str)
-    site_df = site_df.rename(columns={
-        "Etilt": "electrical_tilt",
-        "Mtilt": "mechanical_tilt",
-        "Height": "antenna_height",
-    })
+    site_df = _ensure_site_prediction_columns(site_df)
+
+    if "tx_power" not in site_df.columns and "maximum_transmission_power_of_resource" in site_df.columns:
+        site_df["tx_power"] = site_df["maximum_transmission_power_of_resource"]
+    if "tx_power" not in site_df.columns:
+        site_df["tx_power"] = 46.0
+    site_df["tx_power"] = pd.to_numeric(site_df["tx_power"], errors="coerce").fillna(46.0)
 
     # FIX #3 ── Assign frequency from args, not hardcoded 1800
     if "frequency_mhz" not in site_df.columns:

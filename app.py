@@ -1,12 +1,32 @@
 import os
 import logging
+import sys
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
+
+def _configure_console_streams():
+    """Avoid Windows cp1252 crashes when background jobs print Unicode."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(errors="replace")
+            except Exception:
+                pass
+
+
+_configure_console_streams()
+
 # Always load python/.env regardless of current working directory (important when launched from electron/)
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+# Force backend-proxy mode unless explicitly overridden.
+os.environ.setdefault("DB_ACCESS_MODE", "backend")
 
 # Import config, blueprints, and db
 from config import config
@@ -19,6 +39,8 @@ from tools.prediction.routes import prediction_bp
 from tools.area_breakup.routes import area_breakup_bp
 from tools.report.routes import report_bp
 from tools.lte_prediction.routes import lte_prediction_bp
+from tools.lte_prediction_optimised.routes import lte_prediction_op
+from tools.lte_tilt_recommandation.routes import lte_tilt_recommendation_bp
 from tools.local_mapview.routes import local_mapview_bp
 
 from extensions import db
@@ -69,13 +91,13 @@ def create_app(config_name='default'):
         os.getenv("UPLOAD_FOLDER")
         or os.getenv("PYTHON_UPLOAD_FOLDER")
         or app.config.get("UPLOAD_FOLDER")
-        or os.path.join(os.path.dirname(__file__), 'uploads')
+        or os.path.join(app.config.get("RUNTIME_ROOT", os.path.dirname(__file__)), 'uploads')
     )
     output_folder = (
         os.getenv("OUTPUT_FOLDER")
         or os.getenv("PYTHON_OUTPUT_FOLDER")
         or app.config.get("OUTPUT_FOLDER")
-        or os.path.join(os.path.dirname(__file__), 'outputs')
+        or os.path.join(app.config.get("RUNTIME_ROOT", os.path.dirname(__file__)), 'outputs')
     )
     app.config['UPLOAD_FOLDER'] = upload_folder
     app.config['OUTPUT_FOLDER'] = output_folder
@@ -118,6 +140,8 @@ def create_app(config_name='default'):
     app.register_blueprint(area_breakup_bp, url_prefix='/api/area-breakup')
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(lte_prediction_bp, url_prefix="/api/lte-prediction")
+    app.register_blueprint(lte_prediction_op, url_prefix="/api/lte-prediction-optimised")
+    app.register_blueprint(lte_tilt_recommendation_bp, url_prefix="/api/lte-tilt-recommendation")
     app.register_blueprint(local_mapview_bp, url_prefix="/api/local-mapview")
 
 
@@ -134,7 +158,10 @@ def create_app(config_name='default'):
                 "prediction": "/api/prediction",
                 "area_breakup": "/api/area-breakup",
                 "report": "/api/report",
-                'site_prediction': '/api/lte-prediction/run'
+                "site_prediction": "/api/lte-prediction/run",
+                "optimized_prediction": "/api/lte-prediction-optimised/run",
+                "lte_tilt_recommendation": "/api/lte-tilt-recommendation/optimize",
+                "local_mapview": "/api/local-mapview",
             }
         })
 

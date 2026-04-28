@@ -2,6 +2,16 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine, text, bindparam
 from dotenv import load_dotenv
+from utils.signaltrackers_client import (
+    backend_db_mode_enabled,
+    fetch_project_by_id,
+    fetch_project_regions,
+    fetch_report_network_logs,
+    fetch_sessions,
+    fetch_user_by_id as fetch_backend_user_by_id,
+    fetch_user_thresholds,
+    update_project_download_path as update_backend_project_download_path,
+)
 
 load_dotenv()
 
@@ -69,6 +79,9 @@ def describe_table(table_name: str):
 # =====================================================
 
 def get_project_by_id(project_id: int, conn=None):
+    if backend_db_mode_enabled():
+        return fetch_project_by_id(project_id)
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -91,6 +104,9 @@ def get_network_logs_for_sessions(session_ids: list[int], conn=None) -> pd.DataF
     if not session_ids:
         return pd.DataFrame()
 
+    if backend_db_mode_enabled():
+        return fetch_report_network_logs(session_ids)
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -111,6 +127,9 @@ def get_network_logs_for_sessions(session_ids: list[int], conn=None) -> pd.DataF
 
 
 def get_project_regions(project_id: int, conn=None) -> list[dict]:
+    if backend_db_mode_enabled():
+        return fetch_project_regions(project_id)
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -134,6 +153,19 @@ def get_project_regions(project_id: int, conn=None) -> list[dict]:
 
 
 def get_user_thresholds(user_id: int, debug: bool = False, conn=None) -> dict | None:
+    if backend_db_mode_enabled():
+        data = fetch_user_thresholds(user_id)
+        if debug:
+            print("\n================ DB THRESHOLD ROW =================")
+            print(f"user_id = {user_id}")
+            if not data:
+                print("NO ROW RETURNED FROM BACKEND")
+                return None
+            for k, v in data.items():
+                print(f"{k}: {repr(v)}")
+            print("===================================================\n")
+        return data
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -166,6 +198,9 @@ def get_user_thresholds(user_id: int, debug: bool = False, conn=None) -> dict | 
 
 
 def get_user_by_id(user_id: int, conn=None) -> dict | None:
+    if backend_db_mode_enabled():
+        return fetch_backend_user_by_id(user_id)
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -189,6 +224,10 @@ def update_project_download_path(project_id: int, download_path: str, conn=None)
     """
     Update tbl_project.Download_path for the given project.
     """
+    if backend_db_mode_enabled():
+        update_backend_project_download_path(project_id, download_path)
+        return
+
     close_conn = False
     if conn is None:
         conn = _connect()
@@ -202,6 +241,32 @@ def update_project_download_path(project_id: int, download_path: str, conn=None)
         """)
         conn.execute(query, {"download_path": download_path, "project_id": project_id})
         conn.commit()
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def get_sessions_by_ids(session_ids: list[int], conn=None) -> pd.DataFrame:
+    if not session_ids:
+        return pd.DataFrame()
+
+    if backend_db_mode_enabled():
+        return fetch_sessions(session_ids)
+
+    close_conn = False
+    if conn is None:
+        conn = _connect()
+        close_conn = True
+
+    try:
+        query = text("""
+            SELECT id, start_time, end_time, distance
+            FROM tbl_session
+            WHERE id IN :session_ids
+            ORDER BY start_time, id
+        """).bindparams(bindparam("session_ids", expanding=True))
+
+        return pd.read_sql(query, conn, params={"session_ids": session_ids})
     finally:
         if close_conn:
             conn.close()

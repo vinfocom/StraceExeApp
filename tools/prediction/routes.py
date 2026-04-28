@@ -17,6 +17,9 @@ prediction_bp = Blueprint("prediction", __name__)
 def _persist_project_grid_size(project_id, pixel_size):
     if not project_id:
         return
+    if backend_db_mode_enabled():
+        # In backend-proxy mode Python must not write directly to DB.
+        return
 
     try:
         numeric_grid = float(pixel_size)
@@ -61,26 +64,20 @@ def background_prediction_task(app, project_id, session_ids, run_dir, indoor_mod
         try:
             print(f"--- [Background] Starting Prediction for Project {project_id} ---")
 
-            if backend_db_mode_enabled():
-                out_dir, count = run_prediction_pipeline(
-                    db_connection=None,
-                    project_id=str(project_id),
-                    session_ids=[str(s) for s in session_ids],
-                    outdir=run_dir,
-                    indoor_mode=indoor_mode,
-                    pixel_size_meters=pixel_size,
+            if not backend_db_mode_enabled():
+                raise RuntimeError(
+                    "DB_ACCESS_MODE must be 'backend' for prediction routes. "
+                    "Direct DB mode is disabled for this deployment."
                 )
-            else:
-                # Create a dedicated connection for this thread
-                with db.engine.begin() as conn:
-                    out_dir, count = run_prediction_pipeline(
-                        db_connection=conn,
-                        project_id=str(project_id),
-                        session_ids=[str(s) for s in session_ids],
-                        outdir=run_dir,
-                        indoor_mode=indoor_mode,
-                        pixel_size_meters=pixel_size
-                    )
+
+            out_dir, count = run_prediction_pipeline(
+                db_connection=None,
+                project_id=str(project_id),
+                session_ids=[str(s) for s in session_ids],
+                outdir=run_dir,
+                indoor_mode=indoor_mode,
+                pixel_size_meters=pixel_size,
+            )
             
             print(f"--- [Background] Success! Project {project_id}: {count} rows written. ---")
             

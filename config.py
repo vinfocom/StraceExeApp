@@ -12,12 +12,21 @@ def _default_runtime_root() -> str:
         return explicit_root
 
     if os.getenv("RENDER"):
-        return "/tmp/s-tracer-runtime"
+        return os.path.join(tempfile.gettempdir(), "s-tracer-runtime")
 
     if getattr(sys, "frozen", False):
         return os.path.join(tempfile.gettempdir(), "s-tracer-runtime")
 
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_runtime_root() -> str:
+    return _default_runtime_root()
+
+
+def get_reports_root() -> str:
+    return os.path.join(get_runtime_root(), "reports")
+
 
 class Config:
     # ---------------------------------------------------
@@ -32,7 +41,8 @@ class Config:
 
     # Base directory
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    RUNTIME_ROOT = _default_runtime_root()
+    RUNTIME_ROOT = get_runtime_root()
+    REPORTS_FOLDER = get_reports_root()
 
     # ---------------------------------------------------
     # UPLOAD / OUTPUT DIRECTORY HANDLING
@@ -71,7 +81,7 @@ class Config:
     # direct  -> Python connects DB using DATABASE_URL
     # backend -> Python reads/writes through Signal-Trackers API
     # ---------------------------------------------------
-    DB_ACCESS_MODE = os.getenv("DB_ACCESS_MODE", "direct").strip().lower()
+    DB_ACCESS_MODE = os.getenv("DB_ACCESS_MODE", "backend").strip().lower()
     USE_BACKEND_DB_PROXY = DB_ACCESS_MODE == "backend"
 
     # Keep SQLAlchemy initialized even in backend mode (safe local fallback),

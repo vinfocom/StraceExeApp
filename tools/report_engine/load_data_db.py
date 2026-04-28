@@ -3,11 +3,11 @@ from shapely.geometry import Point
 from shapely.wkt import loads as load_wkt
 
 from .db import (
-    get_engine,
     get_project_by_id,
     get_network_logs_for_sessions,
     get_project_regions,
 )
+from utils.signaltrackers_client import backend_db_mode_enabled
 
 
 # -----------------------------------------------------
@@ -115,9 +115,14 @@ def load_project_data(project_id: int):
         filtered_df  : DataFrame (polygon-filtered data)
         project_meta : dict (tbl_project row)
     """
-    engine = get_engine()
+    conn = None
+    if not backend_db_mode_enabled():
+        from .db import get_engine
 
-    with engine.connect() as conn:
+        engine = get_engine()
+        conn = engine.connect()
+
+    try:
         # 1 Project
         project = get_project_by_id(project_id, conn)
         if not project:
@@ -131,8 +136,6 @@ def load_project_data(project_id: int):
 
         # 2 Raw network logs
         raw_df = get_network_logs_for_sessions(session_ids, conn)
-
-        
 
         # 3 Regions / polygons
         region_rows = get_project_regions(project_id, conn)
@@ -161,3 +164,6 @@ def load_project_data(project_id: int):
             project["region"] = None
 
         return raw_df, filtered_df, project
+    finally:
+        if conn is not None:
+            conn.close()

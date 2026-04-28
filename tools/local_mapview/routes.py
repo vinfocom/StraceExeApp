@@ -160,35 +160,55 @@ def get_projects():
         projects = fetch_projects_remote(company_id=company_id)
         return jsonify({"Status": 1, "Message": "Success", "Data": projects}), 200
 
-    where = ["(status IS NULL OR status <> 0)"]
+    where = ["(p.status IS NULL OR p.status <> 0)"]
     params = {}
 
     if company_id is not None:
-        where.append("company_id = :company_id")
+        where.append("p.company_id = :company_id")
         params["company_id"] = company_id
 
     query = text(
         f"""
         SELECT
-            id,
-            project_name,
-            ref_session_id,
-            from_date,
-            to_date,
-            provider,
-            tech,
-            band,
-            earfcn,
-            apps,
-            created_on,
-            ended_on,
-            status,
-            company_id,
-            Download_path,
-            grid_size
-        FROM tbl_project
+            p.id,
+            p.project_name,
+            p.ref_session_id,
+            p.from_date,
+            p.to_date,
+            p.provider,
+            p.tech,
+            p.band,
+            p.earfcn,
+            p.apps,
+            p.created_on,
+            p.ended_on,
+            p.status,
+            p.company_id,
+            p.Download_path,
+            p.grid_size,
+            ST_AsText(p.polygon) AS project_polygon_wkt,
+            mr.region_wkt,
+            mr.region_blob_b64,
+            COALESCE(ST_AsText(p.polygon), mr.region_wkt) AS geometry_wkt
+        FROM tbl_project p
+        LEFT JOIN (
+            SELECT
+                mr1.tbl_project_id,
+                ST_AsText(mr1.region) AS region_wkt,
+                TO_BASE64(mr1.region) AS region_blob_b64
+            FROM map_regions mr1
+            INNER JOIN (
+                SELECT tbl_project_id, MAX(id) AS max_id
+                FROM map_regions
+                WHERE tbl_project_id IS NOT NULL
+                GROUP BY tbl_project_id
+            ) picked
+              ON picked.tbl_project_id = mr1.tbl_project_id
+             AND picked.max_id = mr1.id
+        ) mr
+          ON mr.tbl_project_id = p.id
         WHERE {' AND '.join(where)}
-        ORDER BY id DESC
+        ORDER BY p.id DESC
         """
     )
 
